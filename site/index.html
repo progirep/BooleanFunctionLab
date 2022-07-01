@@ -1,0 +1,61 @@
+<script src="jquery.min.js" ></script>
+<script src="jquery-linedtextarea.js"></script>
+<link href="jquery-linedtextarea.css" type="text/css" rel="stylesheet" />
+
+<style>
+#output {
+    background-color: black;
+    font-family:monospace;
+    font-size:11px;
+    width:100%;
+    margin:1em 0px 1em 0px;
+}
+
+.copied {
+	color : #888888;
+	margin:0px 0px 0px 0px;
+}
+
+.dnf {
+	color : #88FF88;
+}
+
+.error {
+	color : #FF8888;
+}
+
+.terminalLine {
+	color : #FFFFFF;
+}
+</style>
+
+
+<center>
+<textarea style='height: 60%; width: 95%;' id="specification" class="specclass">
+</textarea>
+</center>
+
+<script>
+$(function() {
+	$(".specclass").linedtextarea();
+});
+</script>
+
+<br/>
+<script type='text/javascript' src="boollab.js"></script>
+<center><button style='font: bold 12px;width: 100%; height: 40px;' id="solve">Run</button></center>
+<script type='text/javascript'>
+$("#solve").click(function() {
+    var element = document.getElementById('output');
+    element.innerHTML = "";
+    var returned = Module.cwrap('runHTMLVersion', 'number', ['string']);
+    var inputData = document.getElementById("specification").value
+    var buffer = Module._malloc(inputData.length+1);
+	Module.writeStringToMemory(inputData, buffer);
+    var a = returned(inputData);
+    document.getElementById("output").innerHTML = Module.Pointer_stringify(a);
+    Module._free(a)
+    Module._free(inputData)
+});
+</script>
+<div id="output"></div>

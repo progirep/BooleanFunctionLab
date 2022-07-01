@@ -1,0 +1,62 @@
+# Definitions
+COMPILEROPTIONS = -DHAVE_IEEE_754 -DBSD -DCUDD_COMPILER_OPTIONS_SET
+DEFINES       = -DUSE_CUDD -DNDEBUG
+CFLAGS        = -pipe -O3 -g $(COMPILEROPTIONS) -Wall -W $(DEFINES)
+CXXFLAGS      = -pipe -O3 -g -std=c++11 $(COMPILEROPTIONS) $(DEFINES)
+INCPATH       = -I. -I../lib/cudd-3.0.0/ -I../lib/cudd-3.0.0/cudd -I../lib/cudd-3.0.0/mtr -I../lib/cudd-3.0.0/epd -I../lib/cudd-3.0.0/st -I../lib/cudd-3.0.0/util -I../lib/cudd-3.0.0/dddmp -IBFAbstractionLibrary 
+
+# Object files
+OBJECTS       = main.o \
+				context.o booleanFormulaParser.o \
+				BFAbstractionLibrary/bddDump.o BFAbstractionLibrary/BFCuddManager.o \
+				BFAbstractionLibrary/BFCuddVarCube.o BFAbstractionLibrary/BFCudd.o \
+				BFAbstractionLibrary/BFCuddMintermEnumerator.o  BFAbstractionLibrary/BFCuddVarVector.o \
+                $(filter-out ../lib/cudd-3.0.0/cudd/testextra.o,$(filter-out ../lib/cudd-3.0.0/cudd/testcudd.o,$(patsubst %.c,%.o,$(wildcard ../lib/cudd-3.0.0/cudd/*.c)))) \
+                $(filter-out ../lib/cudd-3.0.0/mtr/testmtr.o,$(patsubst %.c,%.o,$(wildcard ../lib/cudd-3.0.0/mtr/*.c))) \
+                $(patsubst %.c,%.o,$(wildcard ../lib/cudd-3.0.0/epd/*.c)) \
+                $(filter-out ../lib/cudd-3.0.0/st/testst.o,$(patsubst %.c,%.o,$(wildcard ../lib/cudd-3.0.0/st/*.c))) \
+                $(filter-out ../lib/cudd-3.0.0/util/cpu_stats.o,$(patsubst %.c,%.o,$(wildcard ../lib/cudd-3.0.0/util/*.c))) \
+                $(filter-out ../lib/cudd-3.0.0/dddmp/testdddmp.o,$(patsubst %.c,%.o,$(wildcard ../lib/cudd-3.0.0/dddmp/*.c)))
+
+# Headers
+HEADERS_BUT_EXTENSIONS = context.hpp booleanFormulaParser.hpp \
+	BFAbstractionLibrary/bddDump.h \
+	BFAbstractionLibrary/BFCudd.h \
+	BFAbstractionLibrary/BFCuddInlines.h \
+	BFAbstractionLibrary/BFCuddManager.h \
+	BFAbstractionLibrary/BFCuddMintermEnumerator.h \
+	BFAbstractionLibrary/BFCuddVarCube.h \
+	BFAbstractionLibrary/BFCuddVarVector.h \
+	BFAbstractionLibrary/BF.h
+
+# Executable & Cleaning
+boollab.js: $(OBJECTS)
+	emcc $(LFLAGS) -o boollab.bc $(OBJECTS)
+	EMCC_DEBUG=1 emcc -O1 -s EXPORTED_FUNCTIONS='["_runHTMLVersion"]' -s ALLOW_MEMORY_GROWTH=1 -s DISABLE_EXCEPTION_CATCHING=0 -s TOTAL_STACK=26214400 boollab.bc -o boollab.js
+	cp boollab.js ../site
+
+clean: 
+	rm -f $(OBJECTS) ../lib/cudd-3.0.0/config.h
+	cd ../lib/cudd-3.0.0; make clean
+
+# Special Transition Rules
+../lib/cudd-3.0.0/config.h:
+	cd ../lib/cudd-3.0.0; emconfigure ./configure
+	
+boost:
+	ln -s /usr/include/boost boost
+	
+sys:
+	mkdir sys
+	ln -s $(EMSCRIPTEN)/system/include/libc/endian.h sys/endian.h
+
+main.o : main.cpp ../lib/cudd-3.0.0/config.h $(HEADERS_BUT_EXTENSIONS) boost sys
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o "$@" "$<"
+
+# General Translation rules
+%.o : %.cpp ../lib/cudd-3.0.0/config.h $(HEADERS_BUT_EXTENSIONS) boost sys
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o "$@" "$<"
+
+%.o : %.c ../lib/cudd-3.0.0/config.h
+	$(CC) -c $(CFLAGS) $(INCPATH) -o "$@" "$<"
+
