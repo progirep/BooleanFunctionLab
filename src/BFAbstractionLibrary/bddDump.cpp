@@ -139,7 +139,7 @@ std::pair<int,unsigned int> BDD_newDumpDotRecurse(const BF &bdd, int level, Recu
  *
  * Uses a custom variable ordering and "manual" dumping without "negation" edges
  */
-void BF_newDumpDot(const VariableInfoContainer &cont, const BF &b, const char* varOrder, const std::string filename)
+void BF_newDumpDot(const VariableInfoContainer &cont, const BF &b, const char* varOrder, std::ostream &dumpFile)
 {
 	        
 
@@ -188,10 +188,7 @@ void BF_newDumpDot(const VariableInfoContainer &cont, const BF &b, const char* v
 	RecurseContext context(vars,nodes,cont);
 	// Process recursively
 	BDD_newDumpDotRecurse(b,0,context);
-		
-        // Opening output file
-	std::ofstream dumpFile(filename.c_str());
-	
+			
 	if (context.nodesSoFar<=MAX_NODES_GRAPH) {
 	
 		// Preface
@@ -281,8 +278,7 @@ void BF_newDumpDot(const VariableInfoContainer &cont, const BF &b, const char* v
 		dumpFile << "digraph \"DD\" { \n  \"Graph is too big\"\n}\n";		
 	}
 		
-	dumpFile.close();
-	if (dumpFile.fail()) throw BFDumpDotException("MyDotDump: Writing to output file "+filename+" failed.");
+    if (dumpFile.fail()) throw BFDumpDotException("DumpDot Failed");
 	
 }
 

@@ -27,11 +27,11 @@ TEMPLATE = app \
 CONFIG += release
 CONFIG -= app_bundle
 CONFIG -= qt
-HEADERS += BFAbstractionLibrary/BF.h BFAbstractionLibrary/BFCudd.h context.hpp booleanFormulaParser.hpp 
+HEADERS += BFAbstractionLibrary/bddDump.h BFAbstractionLibrary/BF.h BFAbstractionLibrary/BFCudd.h context.hpp booleanFormulaParser.hpp
 
 SOURCES += BFAbstractionLibrary/bddDump.cpp BFAbstractionLibrary/BFCuddVarVector.cpp BFAbstractionLibrary/BFCudd.cpp BFAbstractionLibrary/BFCuddManager.cpp \
     BFAbstractionLibrary/BFCuddVarCube.cpp main.cpp context.cpp \
-    booleanFormulaParser.cpp 
+    booleanFormulaParser.cpp BFAbstractionLibrary/bddDump.cpp
 
 TARGET = boollab
 INCLUDEPATH = ../lib/cudd-2.5.0/include BFAbstractionLibrary 

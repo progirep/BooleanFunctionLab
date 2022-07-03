@@ -102,8 +102,9 @@ BF parseBraces(Context const &context, const std::map<std::string,BF> &definedBF
     if (tokens[pos]=="(") {
         pos++;
         BF fresh = parseExists(context,definedBFs,tokens,pos);
+        if (pos>=tokens.size()) throw ParseException("Unexpected end of the brace expression");
         if (tokens[pos]!=")") {
-            throw ParseException("Braces not properly closed.");
+            throw ParseException("Braces not properly closed. "+tokens[pos]);
         }
         pos++;
         return fresh;
@@ -115,70 +116,38 @@ BF parseNot(Context const &context, const std::map<std::string,BF> &definedBFs,s
     if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
     if (tokens[pos]=="!") {
         pos++;
-        return !(parseBraces(context,definedBFs,tokens,pos));
+        return !(parseNot(context,definedBFs,tokens,pos));
     }
     return parseBraces(context,definedBFs,tokens,pos);
 }
-
-
-BF parseAnd(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
-    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
-
-    BF subPart = parseNot(context,definedBFs,tokens,pos);
-    if (pos>=tokens.size()) return subPart;
-    if (tokens[pos]=="&") {
-        pos++;
-        BF subPart2 = parseNot(context,definedBFs,tokens,pos);
-        return subPart & subPart2;
-    } else {
-        return subPart;
-    }
-}
-
-BF parseOr(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
-    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
-
-    BF subPart = parseAnd(context,definedBFs,tokens,pos);
-    if (pos>=tokens.size()) return subPart;
-    if (tokens[pos]=="|") {
-        pos++;
-        BF subPart2 = parseAnd(context,definedBFs,tokens,pos);
-        return subPart | subPart2;
-    } else if (tokens[pos]=="->") {
-        pos++;
-        BF subPart2 = parseAnd(context,definedBFs,tokens,pos);
-        return !subPart | subPart2;
-    } else {
-        return subPart;
-    }
-}
-
-
 
 BF parseSwap(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
     if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
 
     // First parse something. If that works, then see if a squared brace is following
-    BF subPart = parseOr(context,definedBFs,tokens,pos);
-    if (pos>=tokens.size()) return subPart;
-    if (tokens[pos]=="[") {
+    BF subPart = parseNot(context,definedBFs,tokens,pos);
+
+    while ((pos<tokens.size()) && (tokens[pos]=="[")) {
         // Substitution...
+        //std::ostringstream m;
+        //m << "SUBS A" << tokens[pos].size();
+        //throw ParseException(m.str());
         pos++;
         std::vector<BF> varsA;
         std::vector<BF> varsB;
         while (true) {
             // Parse next var
-            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression");
+            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression (A)");
             BF nextVar = context.getVariableBF(tokens[pos++]);
             varsA.push_back(nextVar);
-            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression");
+            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression (B)");
             if (tokens[pos++]!="/") {
                 throw ParseException("Expected '/' in swapping expression");
             }
-            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression");
+            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression (C)");
             nextVar = context.getVariableBF(tokens[pos++]);
             varsB.push_back(nextVar);
-            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression");
+            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression (D)");
             if (tokens[pos]==",") {
                 pos++;
             } else {
@@ -195,12 +164,43 @@ BF parseSwap(Context const &context, const std::map<std::string,BF> &definedBFs,
         for (auto it : varsB) parts.insert(it.getCuddNode());
         if (parts.size()!=varsA.size()+varsB.size()) throw ParseException("When swapping, variables must not occur twice!");
 
-
-
         BFVarVector v1 = context.getBFMgr().computeVarVector(varsA);
         BFVarVector v2 = context.getBFMgr().computeVarVector(varsB);
-        return subPart.SwapVariables(v1,v2);
+        subPart = subPart.SwapVariables(v1,v2);
 
+    }
+    return subPart;
+}
+
+
+
+BF parseAnd(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
+    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
+
+    BF subPart = parseSwap(context,definedBFs,tokens,pos);
+    if (pos>=tokens.size()) return subPart;
+    if (tokens[pos]=="&") {
+        pos++;
+        BF subPart2 = parseAnd(context,definedBFs,tokens,pos);
+        return subPart & subPart2;
+    } else {
+        return subPart;
+    }
+}
+
+BF parseOr(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
+    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
+
+    BF subPart = parseAnd(context,definedBFs,tokens,pos);
+    if (pos>=tokens.size()) return subPart;
+    if (tokens[pos]=="|") {
+        pos++;
+        BF subPart2 = parseOr(context,definedBFs,tokens,pos);
+        return subPart | subPart2;
+    } else if (tokens[pos]=="->") {
+        pos++;
+        BF subPart2 = parseOr(context,definedBFs,tokens,pos);
+        return !subPart | subPart2;
     } else {
         return subPart;
     }
@@ -234,14 +234,14 @@ BF parseExists(Context const &context, const std::map<std::string,BF> &definedBF
         if (pos>=tokens.size()) throw ParseException("Unexpected end of abstraction expression");
         if (tokens[pos]==".") pos++;
 
-        BF toAbstract = parseSwap(context,definedBFs,tokens,pos);
+        BF toAbstract = parseExists(context,definedBFs,tokens,pos);
         if (isExists)
             return toAbstract.ExistAbstract(cube);
         else
             return toAbstract.UnivAbstract(cube);
 
     } else {
-        return parseSwap(context,definedBFs,tokens,pos);
+        return parseOr(context,definedBFs,tokens,pos);
     }
 }
 
@@ -253,12 +253,12 @@ BF parseBooleanFormula(std::string const &formula, Context const &context, const
     getTokens(formula+" ",tokens,os);
 
     // Debug
-    os << tokens.size() << "\n" << "\n";
+    /*os << tokens.size() << "\n" << "\n";
     os << "(" << tokens[3].size();
     for (auto a : tokens) {
         os << "," << a;
     }
-    os << ")\n";
+    os << ")\n";*/
 
     int posTokens = 0;
     BF result = parseExists(context,definedBFs,tokens,posTokens);

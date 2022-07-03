@@ -35,7 +35,11 @@ HEADERS_BUT_EXTENSIONS = context.hpp booleanFormulaParser.hpp \
 boollab.js: $(OBJECTS)
 	# emcc $(LFLAGS) -o boollab.bc $(OBJECTS)
 	# EMCC_DEBUG=1 emcc -O1 -s EXPORTED_FUNCTIONS='["_runHTMLVersion"]' -s ALLOW_MEMORY_GROWTH=1 -s DISABLE_EXCEPTION_CATCHING=0 -s TOTAL_STACK=26214400 -s INITIAL_MEMORY=65536000 boollab.bc -o boollab.js
+	
 	EMCC_DEBUG=1 emcc -O1 -s EXPORTED_FUNCTIONS='["_runHTMLVersion"]' -s EXTRA_EXPORTED_RUNTIME_METHODS=["cwrap","writeStringToMemory","UTF8ToString"] -s DISABLE_EXCEPTION_CATCHING=0 -s ALLOW_MEMORY_GROWTH=1 -s DISABLE_EXCEPTION_CATCHING=0 -s TOTAL_STACK=26214400 -s INITIAL_MEMORY=65536000 -s LLD_REPORT_UNDEFINED  -sWASM=0 -s ASSERTIONS=1 $(OBJECTS) -g -o boollab.js
+	cp boollab.js ../site-offline
+	
+	EMCC_DEBUG=1 emcc -O1 -s EXPORTED_FUNCTIONS='["_runHTMLVersion"]' -s EXTRA_EXPORTED_RUNTIME_METHODS=["cwrap","writeStringToMemory","UTF8ToString"] -s DISABLE_EXCEPTION_CATCHING=0 -s ALLOW_MEMORY_GROWTH=1 -s DISABLE_EXCEPTION_CATCHING=0 -s TOTAL_STACK=26214400 -s INITIAL_MEMORY=65536000 -s LLD_REPORT_UNDEFINED -s ASSERTIONS=1 $(OBJECTS) -g -o boollab.js
 	cp boollab.js ../site
 	cp boollab.wasm ../site
 	cd ~/Reps/personal_homepage; ./sync.sh

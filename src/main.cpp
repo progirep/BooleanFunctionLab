@@ -84,7 +84,11 @@ void processCommands(Context &context, std::istream &inStream, std::ostream &out
                 // Print a test
                 if (html) outStream << HTML_BDD_START;
                 outStream << "<div id=\"graph" << graphNum << "\">Hello!</div>\n";
-                outStream << "<MyBDD>graph" << graphNum << "<MyBDD>" << "digraph { A -> B; }" << "<MyBDD>";
+                outStream << "<MyBDD>graph" << graphNum << "<MyBDD>";
+
+                BF_newDumpDot(context,definedBFs[varDef],NULL,outStream);
+
+                outStream << "<MyBDD>";
                 if (html) outStream << HTML_BDD_END;
                 graphNum++;
 
@@ -95,7 +99,7 @@ void processCommands(Context &context, std::istream &inStream, std::ostream &out
                 boost::trim(varDef);
 
                 // Variable name illegal?
-                if ((varDef=="1") || (varDef=="0") || (varDef=="f") || (varDef=="t") || (varDef=="true") || (varDef=="false") || (varDef=="True") || (varDef=="False") || (varDef=="TRUE") || (varDef=="FALSE") || (varDef=="exists") || (varDef=="forall")) {
+                if ((varDef=="1") || (varDef=="0") || (varDef=="exists") || (varDef=="forall")) {
                     if (html) outStream << HTML_ERROR_START;
                     outStream << "Error: Illegal variable name in line " << lineNumber << std::endl;
                     if (html) outStream << HTML_ERROR_END;
@@ -194,6 +198,10 @@ void processCommands(Context &context, std::istream &inStream, std::ostream &out
     } catch (const ParseException error) {
         if (html) outStream << HTML_ERROR_START;
         outStream << error.getMsg() << std::endl;
+        if (html) outStream << HTML_ERROR_END;
+    } catch (const BFDumpDotException error) {
+        if (html) outStream << HTML_ERROR_START;
+        outStream << error.getMessage() << std::endl;
         if (html) outStream << HTML_ERROR_END;
     }
 

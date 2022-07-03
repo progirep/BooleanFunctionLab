@@ -28,7 +28,7 @@ public:
 };
 
 // void BDD_oldDumpDot(const VariableInfoContainer &cont, BF b, const char* filename);
-void BF_newDumpDot(const VariableInfoContainer &cont, const BF &b, const char* varOrder, const std::string filename);
+void BF_newDumpDot(const VariableInfoContainer &cont, const BF &b, const char* varOrder, std::ostream &os);
 
 class BFDumpDotException {
 protected:
@@ -54,7 +54,8 @@ public:
 //=============================================================
 inline bool BF_hasVariableSupport(const VariableInfoContainer &cont, const BF &toCheck, const char *varOrder) {
     try {
-        BF_newDumpDot(cont, toCheck, varOrder, "/dev/null");
+        std::ostringstream os;
+        BF_newDumpDot(cont, toCheck, varOrder, os);
         return true;
     } catch (BFDumpDotException e) {
         return false;
