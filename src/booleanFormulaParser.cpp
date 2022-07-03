@@ -9,175 +9,271 @@
 // terms (including the modifications performed).
 
 #include "booleanFormulaParser.hpp"
+#include <set>
 
-#include <boost/spirit/include/qi.hpp>
-#include <boost/spirit/include/phoenix.hpp>
-#include <boost/spirit/include/phoenix_operator.hpp>
-#include <boost/variant/recursive_wrapper.hpp>
-#include <boost/lexical_cast.hpp>
+// Tokenizer
+void getTokens(std::string const &formula, std::vector<std::string> &tokens, std::ostream &os) {
+    int fptr = 0;
+    std::string currentID = "";
+    while (fptr<formula.length()) {
+        //os << fptr << "-";
+        char c = formula[fptr];
+        bool notend = fptr<formula.length()-1;
 
-namespace qi    = boost::spirit::qi;
-namespace phx   = boost::phoenix;
-
-struct op_or  {};
-struct op_and {};
-struct op_not {};
-struct op_xor {};
-struct op_equiv {};
-struct op_imp {};
-struct op_xabs {};
-
-typedef std::string var;
-template <typename tag> struct binop;
-template <typename tag> struct unop;
-
-typedef boost::variant<var,
-        boost::recursive_wrapper<unop <op_not> >,
-        boost::recursive_wrapper<binop<op_and> >,
-        boost::recursive_wrapper<binop<op_or> >,
-        boost::recursive_wrapper<binop<op_xor> >,
-        boost::recursive_wrapper<binop<op_equiv> >,
-        boost::recursive_wrapper<binop<op_imp> >,
-        boost::recursive_wrapper<binop<op_xabs> >
-        > expr;
-
-template <typename tag> struct binop
-{
-    explicit binop(const expr& l, const expr& r) : oper1(l), oper2(r) { }
-    expr oper1, oper2;
-};
-
-template <typename tag> struct unop
-{
-    explicit unop(const expr& o) : oper1(o) { }
-    expr oper1;
-};
-
-struct eval : boost::static_visitor<BF>
-{
-    const Context &context;
-    const std::map<std::string,BF> &definedBFs;
-
-    eval(Context const &_context, const std::map<std::string,BF> &_definedBFs) : context(_context), definedBFs(_definedBFs) {}
-
-    //
-    BF operator()(const var& v) const
-    {
-        // Constants?
-        if (v=="T" || v=="t" || v=="true" || v=="True" || v=="TRUE" || v=="1")
-            return context.getBFMgr().constantTrue();
-        else if (v=="F" || v=="f" || v=="false" || v=="False" || v=="FALSE" || v=="0")
-            return context.getBFMgr().constantFalse();
-
-        // Defined BFs?
-        auto it = definedBFs.find(v);
-        if (it!=definedBFs.end()) return it->second;
-
-        // Variables
-        return context.getVariableBF(v);
-    }
-
-    BF operator()(const binop<op_and>& b) const
-    {
-        return recurse(b.oper1) & recurse(b.oper2);
-    }
-    BF operator()(const binop<op_or>& b) const
-    {
-        return recurse(b.oper1) | recurse(b.oper2);
-    }
-    BF operator()(const binop<op_xor>& b) const
-    {
-        return recurse(b.oper1) ^ recurse(b.oper2);
-    }
-    BF operator()(const binop<op_imp>& b) const
-    {
-        return (!recurse(b.oper1)) | recurse(b.oper2);
-    }
-    BF operator()(const binop<op_equiv>& b) const
-    {
-        return !(recurse(b.oper1) ^ recurse(b.oper2));
-    }
-    BF operator()(const binop<op_xabs>& b) const
-    {
-        return recurse(b.oper1).ExistAbstractSingleVar(recurse(b.oper2));
-    }
-    BF operator()(const unop<op_not>& u) const
-    {
-        return !recurse(u.oper1);
-    }
-
-    private:
-    template<typename T>
-        BF recurse(T const& v) const
-        { return boost::apply_visitor(*this, v); }
-};
-
-
-
-template <typename It, typename Skipper = qi::space_type>
-struct parser : qi::grammar<It, expr(), Skipper>
-{
-        parser() : parser::base_type(expr_)
-        {
-            using namespace qi;
-
-            expr_  = exabs_.alias();
-
-            exabs_ = (var_ >> "$" >> exabs_) [ _val = phx::construct<binop<op_xabs > >(_2, _1) ] | equiv_ [ _val = _1 ];
-            equiv_ = (imp_ >> "<->" >> equiv_) [ _val = phx::construct<binop<op_equiv > >(_1, _2) ] | imp_ [ _val = _1 ];
-            imp_ =   (or_  >> "->" >> imp_) [ _val = phx::construct<binop<op_imp > >(_1, _2) ] | or_   [ _val = _1 ];
-            or_  =   (xor_ >> '|'  >> or_ ) [ _val = phx::construct<binop<op_or > >(_1, _2) ] | xor_   [ _val = _1 ];
-            xor_ =   (and_ >> '^'  >> xor_ ) [ _val = phx::construct<binop<op_xor > >(_1, _2) ] | and_   [ _val = _1 ];
-            and_ =   (not_ >> '&' >> and_)  [ _val = phx::construct<binop<op_and> >(_1, _2) ] | not_   [ _val = _1 ];
-            not_ =   ('!' > simple       )  [ _val = phx::construct<unop <op_not> >(_1)     ] | simple [ _val = _1 ];
-
-            simple = (('(' > expr_ > ')') | var_);
-            var_ = qi::lexeme[ +qi::char_("a-zA-Z_0-9") ];
-
-            BOOST_SPIRIT_DEBUG_NODE(expr_);
-            BOOST_SPIRIT_DEBUG_NODE(exabs_);
-            BOOST_SPIRIT_DEBUG_NODE(imp_);
-            BOOST_SPIRIT_DEBUG_NODE(or_);
-            BOOST_SPIRIT_DEBUG_NODE(xor_);
-            BOOST_SPIRIT_DEBUG_NODE(and_);
-            BOOST_SPIRIT_DEBUG_NODE(not_);
-            BOOST_SPIRIT_DEBUG_NODE(simple);
-            BOOST_SPIRIT_DEBUG_NODE(var_);
+        // part 1: Long token parsing
+        if ((c==' ') || (c=='\n') || (c=='\t') || (c==0)) {
+            // do nothing
+            if (currentID!="") {
+                tokens.push_back(currentID);
+                //os << "LB" << currentID.size();
+                currentID = "";
+            }
+            fptr++;
+            goto nextone;
+        } else if (((c>='A') && (c<='Z')) || ((c>='a') && (c<='z')))  {
+            currentID += c;
+            fptr++;
+            goto nextone;
+        } else if ((c=='_') && (currentID!="")) {
+            currentID += c;
+            fptr++;
+            goto nextone;
+        } else if ((c>='0') && (c<='9') && (currentID!="")) {
+            currentID += c;
+            fptr++;
+            goto nextone;
+        } else if (currentID!="") {
+            //os << "LA" << currentID.size();
+            tokens.push_back(currentID);
+            currentID = "";
         }
 
-        private:
-        qi::rule<It, var() , Skipper> var_;
-        qi::rule<It, expr(), Skipper> not_, and_, xor_, or_, imp_, equiv_, exabs_, simple, expr_;
-};
-
-
-
-BF parseBooleanFormula(std::string const &formula, Context const &context,const std::map<std::string,BF> &definedBFs) {
-
-    typedef std::string::const_iterator It;
-    It f(formula.begin()), l(formula.end());
-    parser<It> p;
-    BF resultingBF;
-
-    try
-    {
-        expr result;
-        bool ok = qi::phrase_parse(f,l,p,qi::space,result);
-
-        if (!ok)
-            std::cerr << "invalid input\n";
-        else {
-            resultingBF = boost::apply_visitor(eval(context,definedBFs), result);
+        // Part 2: Process rest
+        if ((c=='-') && notend && (formula[fptr+1]=='>')) {
+            tokens.push_back("->");
+            fptr+=2;
+            goto nextone;
+        } else if ((c=='|') && notend && (formula[fptr+1]=='|')) {
+            fptr++; // redundant
+        } else if ((c=='&') && notend && (formula[fptr+1]=='&')) {
+            fptr++; // redundant
         }
 
-    } catch (const qi::expectation_failure<It>& e)
-    {
-        std::ostringstream os;
-        os << "Excepted expression part: "+std::string(e.first, e.last);
-        throw os.str();
+        // Single characters
+        //os << "LX" << (int)c;
+        tokens.push_back(std::string("")+c);
+        fptr++;
+nextone:
+        (void)fptr; // NOP -- There has to be a command after a label.
+    }
+    if (currentID!="") throw "Error: currentID must be empty at the end.";
+}
+
+
+
+// Order of operations:
+
+
+// exists, forall
+// swap
+// OR
+// AND
+// NOT
+// BRACES
+// VAR & CONSTANTS
+BF parseExists(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos);
+
+BF parseAtomic(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
+    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
+    std::string thisOne = tokens[pos++];
+    if (thisOne=="1") return context.getBFMgr().constantTrue();
+    if (thisOne=="0") return context.getBFMgr().constantFalse();
+    if (definedBFs.count(thisOne)>0) return definedBFs.at(thisOne);
+
+    std::ostringstream osm;
+    osm << "Identifyer '" << thisOne << "' not recognized.";
+    throw ParseException(osm.str());
+}
+
+
+
+BF parseBraces(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
+    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
+    if (tokens[pos]=="(") {
+        pos++;
+        BF fresh = parseExists(context,definedBFs,tokens,pos);
+        if (tokens[pos]!=")") {
+            throw ParseException("Braces not properly closed.");
+        }
+        pos++;
+        return fresh;
+    };
+    return parseAtomic(context,definedBFs,tokens,pos);
+}
+
+BF parseNot(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
+    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
+    if (tokens[pos]=="!") {
+        pos++;
+        return !(parseBraces(context,definedBFs,tokens,pos));
+    }
+    return parseBraces(context,definedBFs,tokens,pos);
+}
+
+
+BF parseAnd(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
+    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
+
+    BF subPart = parseNot(context,definedBFs,tokens,pos);
+    if (pos>=tokens.size()) return subPart;
+    if (tokens[pos]=="&") {
+        pos++;
+        BF subPart2 = parseNot(context,definedBFs,tokens,pos);
+        return subPart & subPart2;
+    } else {
+        return subPart;
+    }
+}
+
+BF parseOr(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
+    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
+
+    BF subPart = parseAnd(context,definedBFs,tokens,pos);
+    if (pos>=tokens.size()) return subPart;
+    if (tokens[pos]=="|") {
+        pos++;
+        BF subPart2 = parseAnd(context,definedBFs,tokens,pos);
+        return subPart | subPart2;
+    } else if (tokens[pos]=="->") {
+        pos++;
+        BF subPart2 = parseAnd(context,definedBFs,tokens,pos);
+        return !subPart | subPart2;
+    } else {
+        return subPart;
+    }
+}
+
+
+
+BF parseSwap(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
+    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
+
+    // First parse something. If that works, then see if a squared brace is following
+    BF subPart = parseOr(context,definedBFs,tokens,pos);
+    if (pos>=tokens.size()) return subPart;
+    if (tokens[pos]=="[") {
+        // Substitution...
+        pos++;
+        std::vector<BF> varsA;
+        std::vector<BF> varsB;
+        while (true) {
+            // Parse next var
+            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression");
+            BF nextVar = context.getVariableBF(tokens[pos++]);
+            varsA.push_back(nextVar);
+            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression");
+            if (tokens[pos++]!="/") {
+                throw ParseException("Expected '/' in swapping expression");
+            }
+            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression");
+            nextVar = context.getVariableBF(tokens[pos++]);
+            varsB.push_back(nextVar);
+            if (pos>=tokens.size()) throw ParseException("Unexpected end of swapping expression");
+            if (tokens[pos]==",") {
+                pos++;
+            } else {
+                break; // Exit loop
+            }
+        }
+        if (tokens[pos++]!="]") {
+            throw ParseException("Expected an ']' at the end of a swapping expression.");
+        }
+
+        // Sanity check - No overlap!
+        std::set<DdNode*> parts;
+        for (auto it : varsA) parts.insert(it.getCuddNode());
+        for (auto it : varsB) parts.insert(it.getCuddNode());
+        if (parts.size()!=varsA.size()+varsB.size()) throw ParseException("When swapping, variables must not occur twice!");
+
+
+
+        BFVarVector v1 = context.getBFMgr().computeVarVector(varsA);
+        BFVarVector v2 = context.getBFMgr().computeVarVector(varsB);
+        return subPart.SwapVariables(v1,v2);
+
+    } else {
+        return subPart;
+    }
+}
+
+
+BF parseExists(Context const &context, const std::map<std::string,BF> &definedBFs,std::vector<std::string> const &tokens, int &pos) {
+    if (pos>=tokens.size()) throw ParseException("Unexpected end of the expression");
+
+    if ((tokens[pos]=="exists") || (tokens[pos]=="forall")) {
+        bool isExists = tokens[pos]=="exists";
+        pos++;
+        std::vector<BF> varsAbstract;
+        while (true) {
+            // Parse next var
+            if (pos>=tokens.size()) throw ParseException("Unexpected end of abstraction expression");
+            BF nextVar = context.getVariableBF(tokens[pos]);
+            varsAbstract.push_back(nextVar);
+            pos++;
+            if (pos>=tokens.size()) throw ParseException("Unexpected end of abstraction expression");
+            if (tokens[pos]==",") {
+                pos++;
+            } else {
+                break; // Exit loop
+            }
+        }
+
+        BFVarCube cube = context.getBFMgr().computeCube(varsAbstract);
+
+        // consume dot if present
+        if (pos>=tokens.size()) throw ParseException("Unexpected end of abstraction expression");
+        if (tokens[pos]==".") pos++;
+
+        BF toAbstract = parseSwap(context,definedBFs,tokens,pos);
+        if (isExists)
+            return toAbstract.ExistAbstract(cube);
+        else
+            return toAbstract.UnivAbstract(cube);
+
+    } else {
+        return parseSwap(context,definedBFs,tokens,pos);
+    }
+}
+
+
+
+BF parseBooleanFormula(std::string const &formula, Context const &context, const std::map<std::string,BF> &definedBFs, std::ostream &os) {
+
+    std::vector<std::string> tokens;
+    getTokens(formula+" ",tokens,os);
+
+    // Debug
+    os << tokens.size() << "\n" << "\n";
+    os << "(" << tokens[3].size();
+    for (auto a : tokens) {
+        os << "," << a;
+    }
+    os << ")\n";
+
+    int posTokens = 0;
+    BF result = parseExists(context,definedBFs,tokens,posTokens);
+
+    if (posTokens!=tokens.size()) {
+        // Is it the start of a comment?
+        if (posTokens<=tokens.size()-2) {
+            if ((tokens[posTokens]=="/") && (tokens[posTokens+1]=="/")) return result;
+        }
+        // Otherwise it's superfluous tokens...
+        std::ostringstream osm;
+        osm << "Superfluous tokens in expression, starting with '" << tokens[posTokens] << "'";
+        throw ParseException(osm.str());
     }
 
-    if (f!=l) throw "Unparsed string parts: '" + std::string(f,l) + "'";
+    return result;
 
-    return resultingBF;
 }

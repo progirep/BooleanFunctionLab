@@ -8,6 +8,8 @@
 
 auto constexpr HTML_ERROR_START = "<p class=\"error\">";
 auto constexpr HTML_ERROR_END = "</p>\n";
+auto constexpr HTML_BDD_START = "<p class=\"bdd\">";
+auto constexpr HTML_BDD_END = "</p>\n";
 auto constexpr HTML_COPY_START = "<p class=\"copied\">";
 auto constexpr HTML_COPY_END = "</p>\n";
 auto constexpr HTML_FINALLINE_START = "<p class=\"terminalLine\">";
@@ -18,9 +20,11 @@ void processCommands(Context &context, std::istream &inStream, std::ostream &out
 
     try {
         // Parse input file
+
         if (inStream.fail()) throw "Error: Could not read input.";
         std::string currentLine;
         unsigned int lineNumber = 0;
+        unsigned int graphNum = 0;
         std::map<std::string,BF> definedBFs;
         while (std::getline(inStream,currentLine)) {
             lineNumber++;
@@ -65,6 +69,25 @@ void processCommands(Context &context, std::istream &inStream, std::ostream &out
 
                 context.printDNF(definedBFs[varDef],html,outStream);
 
+            } else if (currentLine.substr(0,9)=="printBDD ") {
+
+                std::string varDef = currentLine.substr(9,std::string::npos);
+                boost::trim(varDef);
+
+                if (definedBFs.count(varDef)==0) {
+                    if (html) outStream << HTML_ERROR_START;
+                    outStream << "Error in line " << lineNumber << ": The boolean function " << varDef << " was not defined.";
+                    if (html) outStream << HTML_ERROR_END;
+                    return;
+                }
+
+                // Print a test
+                if (html) outStream << HTML_BDD_START;
+                outStream << "<div id=\"graph" << graphNum << "\">Hello!</div>\n";
+                outStream << "<MyBDD>graph" << graphNum << "<MyBDD>" << "digraph { A -> B; }" << "<MyBDD>";
+                if (html) outStream << HTML_BDD_END;
+                graphNum++;
+
             } else if (currentLine.substr(0,4)=="var ") {
 
                 // Define variable
@@ -72,7 +95,7 @@ void processCommands(Context &context, std::istream &inStream, std::ostream &out
                 boost::trim(varDef);
 
                 // Variable name illegal?
-                if ((varDef=="1") || (varDef=="0") || (varDef=="f") || (varDef=="t") || (varDef=="true") || (varDef=="false") || (varDef=="True") || (varDef=="False") || (varDef=="TRUE") || (varDef=="FALSE")) {
+                if ((varDef=="1") || (varDef=="0") || (varDef=="f") || (varDef=="t") || (varDef=="true") || (varDef=="false") || (varDef=="True") || (varDef=="False") || (varDef=="TRUE") || (varDef=="FALSE") || (varDef=="exists") || (varDef=="forall")) {
                     if (html) outStream << HTML_ERROR_START;
                     outStream << "Error: Illegal variable name in line " << lineNumber << std::endl;
                     if (html) outStream << HTML_ERROR_END;
@@ -129,15 +152,21 @@ void processCommands(Context &context, std::istream &inStream, std::ostream &out
 
                 BF thisData;
                 try {
-                     thisData = parseBooleanFormula(formula,context,definedBFs);
+                    thisData = parseBooleanFormula(formula,context,definedBFs,outStream);
+                    definedBFs[assignTo] = thisData;
                 } catch (std::string error) {
                     if (html) outStream << HTML_ERROR_START;
                     outStream << "Error in line " << lineNumber << ": " << error << std::endl;
                     if (html) outStream << HTML_ERROR_END;
                     return;
+                } catch (ParseException error) {
+                    if (html) outStream << HTML_ERROR_START;
+                    outStream << "Error in line " << lineNumber << ": " << error.getMsg() << std::endl;
+                    if (html) outStream << HTML_ERROR_END;
+                    return;
                 }
 
-                definedBFs[assignTo] = thisData;
+
             }
         }
 
@@ -161,6 +190,10 @@ void processCommands(Context &context, std::istream &inStream, std::ostream &out
     } catch (const std::string error) {
         if (html) outStream << HTML_ERROR_START;
         outStream << error << std::endl;
+        if (html) outStream << HTML_ERROR_END;
+    } catch (const ParseException error) {
+        if (html) outStream << HTML_ERROR_START;
+        outStream << error.getMsg() << std::endl;
         if (html) outStream << HTML_ERROR_END;
     }
 
